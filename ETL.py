@@ -1,55 +1,62 @@
-import json
-import csv
 import boto3
-
-s3_client = boto3.client('s3')
-
-def extract_data_from_s3(bucket_name, csv_key, json_key, sql_key):
-    csv_data, json_data, sql_data = [], [], []
-
-    # Extract CSV Data
-    csv_obj = s3_client.get_object(Bucket=bucket_name, Key=csv_key)
-    csv_lines = csv_obj['Body'].read().decode('utf-8').splitlines()
-    reader = csv.DictReader(csv_lines)
-    for row in reader:
-        csv_data.append(row)
-
-    # Extract JSON Data
-    json_obj = s3_client.get_object(Bucket=bucket_name, Key=json_key)
-    json_data = json.loads(json_obj['Body'].read().decode('utf-8'))
-
-    # Extract SQL Data (Assuming it's a SQL dump file)
-    sql_obj = s3_client.get_object(Bucket=bucket_name, Key=sql_key)
-    sql_data = sql_obj['Body'].read().decode('utf-8')
-
-    return csv_data, json_data, sql_data
-
-def transform_data(csv_data, json_data, sql_data):
-    # Combine data from CSV, JSON, and SQL (This is a placeholder transformation)
-    transformed_data = {
-        "csv": csv_data,
-        "json": json_data,
-        "sql": sql_data.splitlines()
-    }
-    return transformed_data
-
-def load_transformed_data_to_s3(transformed_data, bucket_name, output_key):
-    output_json = json.dumps(transformed_data)
-    s3_client.put_object(Bucket=bucket_name, Key=output_key, Body=output_json)
+import os
 
 def lambda_handler(event, context):
-    bucket_name = 'farmanullah'
-    csv_key = 'bankData.csv'
-    json_key = 'jsonData.json'
-    sql_key = 'sqlData.sql'
-    output_key = 'transformed_data.json'
+    # AWS S3 Configuration
+    bucket_name = 'farmanullah-ansari'
+    output_folder = '/tmp/output'  # Use /tmp for writable storage in Lambda
+    merged_filename = 'merged_output.txt'
 
-    # ETL Process
-    csv_data, json_data, sql_data = extract_data_from_s3(bucket_name, csv_key, json_key, sql_key)
-    transformed_data = transform_data(csv_data, json_data, sql_data)
-    load_transformed_data_to_s3(transformed_data, bucket_name, output_key)
+    # S3 Client
+    s3 = boto3.client('s3')
 
+    # Paths to the files in the S3 bucket
+    csv_file_path = 'csvData.csv'
+    json_file_path = 'jsonData.json'
+    sql_file_path = 'sqlData.sql'
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    # Download the files from S3
+    s3.download_file(bucket_name, csv_file_path, os.path.join(output_folder, csv_file_path))
+    s3.download_file(bucket_name, json_file_path, os.path.join(output_folder, json_file_path))
+    s3.download_file(bucket_name, sql_file_path, os.path.join(output_folder, sql_file_path))
+
+    # Paths to the downloaded files
+    csv_local_path = os.path.join(output_folder, csv_file_path)
+    json_local_path = os.path.join(output_folder, json_file_path)
+    sql_local_path = os.path.join(output_folder, sql_file_path)
+
+    # Merged output file path
+    merged_output_path = os.path.join(output_folder, merged_filename)
+
+    # Merge the files
+    with open(merged_output_path, 'w') as merged_file:
+        # Append CSV content
+        with open(csv_local_path, 'r') as csv_file:
+            merged_file.write("CSV Data:\n")
+            merged_file.write(csv_file.read())
+            merged_file.write("\n\n")
+        
+        # Append JSON content
+        with open(json_local_path, 'r') as json_file:
+            merged_file.write("JSON Data:\n")
+            merged_file.write(json_file.read())
+            merged_file.write("\n\n")
+        
+        # Append SQL content
+        with open(sql_local_path, 'r') as sql_file:
+            merged_file.write("SQL Data:\n")
+            merged_file.write(sql_file.read())
+            merged_file.write("\n\n")
+
+    # Upload the merged file back to S3
+    s3.upload_file(merged_output_path, bucket_name, f'output/{merged_filename}')
+
+    print(f"Merged file uploaded to S3 bucket '{bucket_name}' in the 'output' folder.")
     return {
         'statusCode': 200,
-        'body': json.dumps('ETL Process Completed')
+        'body': f'Merged file uploaded to S3 bucket {bucket_name} in the output folder.'
     }
