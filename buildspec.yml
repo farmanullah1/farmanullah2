@@ -2,12 +2,24 @@ version: 0.2
 
 phases:
   install:
-    runtime-versions:
-      python: 3.x
     commands:
-      - pip install awscli
+      - echo Installing dependencies...
+      - pip install boto3
+
+  pre_build:
+    commands:
+      - echo Pre-build started...
+
   build:
     commands:
-      - echo "Packaging the Lambda function"
-      - zip -r lambda_function.zip .
-      - aws lambda update-function-code --function-name farmanullah --zip-file fileb://lambda_function.zip
+      - echo Build started...
+      - python etl_script.py
+
+  post_build:
+    commands:
+      - echo Build completed.
+
+artifacts:
+  files:
+    - '**/*'
+  discard-paths: yes
