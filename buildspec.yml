@@ -1,0 +1,13 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.x
+    commands:
+      - pip install awscli
+  build:
+    commands:
+      - echo "Packaging the Lambda function"
+      - zip -r lambda_function.zip .
+      - aws lambda update-function-code --function-name farmanullah --zip-file fileb://lambda_function.zip
